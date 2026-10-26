@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Link address test (sandbox)</title>
+<style>
+body{font:15px/1.45 system-ui,sans-serif;max-width:640px;margin:0 auto;padding:16px;color:#1a1a1a}
+h1{font-size:20px;margin:0 0 4px}h2{font-size:16px;margin:22px 0 6px}
+.box{border:1px solid #ddd;border-radius:10px;padding:12px;margin:10px 0;background:#fafafa}
+label{display:block;font-size:13px;margin:8px 0 2px}input.t{width:100%;padding:8px;border:1px solid #bbb;border-radius:6px;box-sizing:border-box;font-size:15px}
+button{padding:10px 16px;font-size:15px;border:0;border-radius:8px;background:#222;color:#fff;margin:8px 8px 0 0}
+button.s{background:#e5e5e5;color:#111}
+nav a{display:inline-block;padding:6px 10px;border:1px solid #bbb;border-radius:16px;margin:0 6px 6px 0;text-decoration:none;color:#111;font-size:14px}
+nav a.on{background:#222;color:#fff}
+pre{white-space:pre-wrap;word-break:break-word;background:#f0f0f0;padding:10px;border-radius:8px;font-size:13px}
+.note{color:#555;font-size:13px}
+</style></head><body>
+<h1>Stripe Link address test</h1>
+<div class="note">Sandbox only. Test mode, no real money, nothing is charged. Use only the fake data shown here.</div>
+<nav id="nav">
+<a href="?mode=html">1. Separate HTML address</a>
+<a href="?mode=control">2. Stripe address field</a>
+<a href="?mode=reuse">3. Reuse check</a>
+</nav>
+<div id="steps" class="box"></div>
+<form id="f">
+<div id="htmlship" class="box" hidden>
+<b>Separate shipping address (plain HTML form, not a Stripe field)</b>
+<label>Name</label><input class="t" id="s_name" value="Test Person">
+<label>Address</label><input class="t" id="s_line1" value="">
+<label>City</label><input class="t" id="s_city" value="South San Francisco">
+<label>State</label><input class="t" id="s_state" value="CA">
+<label>ZIP</label><input class="t" id="s_zip" value="94080">
+<label>Phone</label><input class="t" id="s_phone" value="">
+</div>
+<div id="email-el"></div>
+<div id="addr-el" style="margin-top:10px"></div>
+<div id="pay-el" style="margin-top:10px"></div>
+<button type="submit" id="go">Save test details</button>
+<button type="button" class="s" id="copy">Copy result</button>
+</form>
+<h2>Result</h2>
+<pre id="out">Nothing yet.</pre>
+<script src="https://js.stripe.com/v3/"></script>
+<script>
+const PK = "pk_test_51U8Ie4QlB5uS2CpIssAgynNXiZiRiNsv2SxipOpIETLc2M5MhlxPU651eRt9eSHP4ht2PNlcIUd0yc1o7wq8qGPC00aDYjsJYF";
+const mode = new URLSearchParams(location.search).get("mode") || "html";
+const q = new URLSearchParams(location.search);
+document.querySelectorAll("#nav a").forEach(a=>{ if(a.search==="?mode="+mode) a.classList.add("on") });
+const KEY = "linktest_email";
+let email = q.get("email") || sessionStorage.getItem(KEY+mode);
+if(!email){ email = "lt-"+mode+"-"+Date.now().toString(36)+Math.random().toString(36).slice(2,8)+"@example.com"; }
+sessionStorage.setItem(KEY+mode,email);
+let ID=sessionStorage.getItem("lt_id_"+mode);
+if(!ID){ID=JSON.stringify({n:100+Math.floor(Math.random()*900),p:"20155501"+String(10+Math.floor(Math.random()*90))});sessionStorage.setItem("lt_id_"+mode,ID);}
+ID=JSON.parse(ID); const STREET=ID.n+" Oyster Point Blvd", PHONE=ID.p;
+const out = document.getElementById("out");
+const log = [];
+function show(){ out.textContent = log.join("\n"); }
+function add(s){ log.push(s); show(); }
+const COMMON=`<li>Card <code>4242 4242 4242 4242</code>, expiry any future date (e.g. <code>12 / 34</code>), CVC <code>123</code>. Name <code>Test Person</code>. Fake phone for this test: <code>${PHONE}</code>.</li>
+<li>Tick "Save my information for faster checkout" (Link) and enter that phone if asked. Billing is set by the page (New York 10001).</li>
+<li>Tap Save test details. If Link asks for a code, enter <code>123456</code>.</li>`;
+const HEAD=`<li>This test's fake address: <code>${STREET}, South San Francisco, CA 94080</code>. Email (pre-filled): <code>${email}</code></li>`;
+const steps = {
+ html: `<b>Test 1 of 3: separate HTML address</b><ol>${HEAD}<li>The address in the grey form below is plain HTML, not a Stripe field. Leave it as is.</li>${COMMON}<li>Tap Copy result and paste it to me. Then open test 3 in a NEW tab or private window.</li></ol>`,
+ control: `<b>Test 2 of 3: Stripe's own address field (control)</b><ol>${HEAD}<li>The address is in Stripe's address field below (pre-filled). Leave it as is.</li>${COMMON}<li>Tap Copy result and paste it to me.</li></ol>`,
+ reuse: `<b>Test 3 of 3: does Link bring the address back?</b><ol>
+<li>Use a NEW tab or private window. The address box starts empty on purpose.</li>
+<li>Type the email from test 1 into the Link email box. Enter code <code>123456</code> when Link asks. Then repeat with the email from test 2 (reload the page first).</li>
+<li>Watch whether the address box fills itself. A match only shows Link returned that address on this fresh visit; it does not say how it got saved. Tap Copy result after each.</li></ol>`
+};
+document.getElementById("steps").innerHTML = steps[mode] || steps.html;
+if(mode==="html") document.getElementById("htmlship").hidden=false;
+document.getElementById("s_line1").value=STREET;document.getElementById("s_phone").value=PHONE;
+const stripe = Stripe(PK);
+const elements = stripe.elements({mode:"payment",amount:1099,currency:"gbp",paymentMethodCreation:"manual",
+  appearance:{theme:"stripe"}});
+const emailEl = elements.create("linkAuthentication", mode==="reuse"?{}:{defaultValues:{email}});
+emailEl.mount("#email-el");
+let addrEl=null, addrValue=null;
+if(mode!=="html"){
+  const opts = {mode:"shipping",fields:{phone:"always"}};
+  if(mode==="control") opts.defaultValues={name:"Test Person",phone:PHONE,address:{line1:STREET,city:"South San Francisco",state:"CA",postal_code:"94080",country:"US"}};
+  addrEl = elements.create("address", opts);
+  addrEl.mount("#addr-el");
+  addrEl.on("change",e=>{ addrValue=e.value; if(mode==="reuse"){
+     const a=e.value.address||{}; const filled=!!(a.line1&&a.city);
+     const canary=/^\d{3} oyster point blvd$/i.test((a.line1||"").trim())&&a.postal_code==="94080";
+     const line="Address box now: "+(!filled?"empty":(canary?"looks like a synthetic test address ("+[a.line1,a.city,a.postal_code].join(", ")+"); compare with the street number in test 1/2":"filled with something else: "+[a.line1,a.city,a.postal_code].join(", ")));
+     const i=log.findIndex(x=>x.startsWith("Address box now")); if(i>=0)log[i]=line; else log.push(line); show(); }});
+}
+const payEl = elements.create("payment",{layout:"tabs",
+  defaultValues:{billingDetails:{name:"Test Person"}},fields:{billingDetails:{address:"never"}}});
+payEl.mount("#pay-el");
+emailEl.on("change",e=>{ if(e.value&&e.value.email){ window._email=e.value.email; if(mode==="reuse"){const l='Email typed: '+e.value.email;const i=log.findIndex(x=>x.startsWith('Email typed'));if(i>=0)log[i]=l;else log.push(l);show();} } });
+if(mode==="reuse"){ log.push("Mode: reuse check. Enter an email from test 1 or 2, then the code 123456.");log.push("Address box now: empty");}
+else log.push("Mode: "+mode+". Email: "+email+". Shipping line1: "+STREET+". Phone: "+PHONE);
+show();
+document.getElementById("f").addEventListener("submit",async ev=>{
+  ev.preventDefault();
+  const sub = await elements.submit();
+  if(sub.error){ add("Form not complete: "+sub.error.message); return; }
+  const params = {payment_method_data:{billing_details:{name:"Test Person",address:{line1:"350 5th Ave",city:"New York",state:"NY",postal_code:"10001",country:"US"}}}};
+  if(mode==="html"){
+    // Deliberately NOT passed to Stripe. Only sits in the page's own HTML form.
+    add("HTML shipping fields filled on page: "+document.getElementById("s_line1").value+" (not passed to Stripe)");
+  }
+  const r = await stripe.createConfirmationToken({elements,params});
+  if(r.error){ add("Token error: "+r.error.message); return; }
+  const t=r.confirmationToken;
+  add("Token created: "+t.id.slice(0,14)+"...");
+  add("token.shipping: "+(t.shipping?JSON.stringify(t.shipping.address):"null"));
+  add("token billing country/zip: "+((t.payment_method_preview&&t.payment_method_preview.billing_details&&t.payment_method_preview.billing_details.address)?JSON.stringify(t.payment_method_preview.billing_details.address):"n/a"));
+  add("payment type: "+(t.payment_method_preview&&t.payment_method_preview.type));
+  add("email used: "+(window._email||email));
+  if(mode==="control"){const sa=t.shipping&&t.shipping.address,ba=t.payment_method_preview&&t.payment_method_preview.billing_details&&t.payment_method_preview.billing_details.address; add("billing same as shipping: "+(sa&&ba&&sa.postal_code===ba.postal_code?"YES (confound, discard this arm)":"no"));}
+  add("Time: "+new Date().toISOString());
+});
+document.getElementById("copy").onclick=async()=>{
+  const txt="MODE "+mode+" (test "+({html:1,control:2,reuse:3}[mode])+")\n"+log.join("\n");
+  try{await navigator.clipboard.writeText(txt);alert("Copied")}catch(e){prompt("Copy this:",txt)}
+};
+</script></body></html>
